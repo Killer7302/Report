@@ -1,0 +1,212 @@
+Arduino code for Dc Motor speed control:
+// L298N Pins
+int ENA = 9;   // PWM pin for speed
+int IN1 = 8;   // Direction pin
+int IN2 = 7;   // Direction pin
+
+void setup() {
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+}
+
+void loop() {
+
+  // -------- FORWARD --------
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+
+  // Increase speed gradually
+  for (int speed = 0; speed <= 255; speed += 5) {
+    analogWrite(ENA, speed);
+    delay(50);
+  }
+
+  delay(1000);
+
+  // Decrease speed gradually
+  for (int speed = 255; speed >= 0; speed -= 5) {
+    analogWrite(ENA, speed);
+    delay(50);
+  }
+
+  delay(1000);
+
+  // -------- REVERSE --------
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+
+  // Increase speed gradually
+  for (int speed = 0; speed <= 255; speed += 5) {
+    analogWrite(ENA, speed);
+    delay(50);
+  }
+
+  delay(1000);
+
+  // Decrease speed gradually
+  for (int speed = 255; speed >= 0; speed -= 5) {
+    analogWrite(ENA, speed);
+    delay(50);
+  }
+
+  delay(2000);
+}
+
+
+Led toggle code:
+#include <WiFi.h>
+
+// Replace with your network credentials
+const char* ssid = "YOUR_SSID";
+const char* password = "YOUR_PASSWORD";
+
+WiFiServer server(80);
+
+String header;
+
+// LED states
+String led26State = "off";
+String led27State = "off";
+
+// GPIO pins
+const int led26 = 26;
+const int led27 = 27;
+
+// Timeout variables
+unsigned long currentTime = 0;
+unsigned long previousTime = 0;
+const long timeoutTime = 2000;
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(led26, OUTPUT);
+  pinMode(led27, OUTPUT);
+
+  digitalWrite(led26, LOW);
+  digitalWrite(led27, LOW);
+
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("WiFi connected.");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  server.begin();
+}
+
+void loop() {
+
+  WiFiClient client = server.available();
+
+  if (client) {
+    Serial.println("New Client Connected");
+
+    String currentLine = "";
+    header = "";
+
+    currentTime = millis();
+    previousTime = currentTime;
+
+    while (client.connected() && currentTime - previousTime <= timeoutTime) {
+
+      currentTime = millis();
+
+      if (client.available()) {
+
+        char c = client.read();
+        Serial.write(c);
+        header += c;
+
+        if (c == '\n') {
+
+          if (currentLine.length() == 0) {
+
+            // LED control
+            if (header.indexOf("GET /26/on") >= 0) {
+              led26State = "on";
+              digitalWrite(led26, HIGH);
+              Serial.println("LED 26 ON");
+            }
+            else if (header.indexOf("GET /26/off") >= 0) {
+              led26State = "off";
+              digitalWrite(led26, LOW);
+              Serial.println("LED 26 OFF");
+            }
+            else if (header.indexOf("GET /27/on") >= 0) {
+              led27State = "on";
+              digitalWrite(led27, HIGH);
+              Serial.println("LED 27 ON");
+            }
+            else if (header.indexOf("GET /27/off") >= 0) {
+              led27State = "off";
+              digitalWrite(led27, LOW);
+              Serial.println("LED 27 OFF");
+            }
+
+            // HTTP Response
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html; charset=utf-8");
+            client.println("Connection: close");
+            client.println();
+
+            // HTML Page
+            client.println("<!DOCTYPE html><html>");
+            client.println("<head>");
+            client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+
+            client.println("<style>");
+            client.println("html {font-family: Arial; text-align: center;}");
+            client.println(".button {background-color:#4CAF50;border:none;color:white;padding:16px 40px;");
+            client.println("text-decoration:none;font-size:20px;margin:2px;cursor:pointer;}");
+            client.println(".button-off {background-color:#555555;}");
+            client.println("</style>");
+
+            client.println("</head><body>");
+            client.println("<h1>ESP32 LED Web Server</h1>");
+
+            // LED 26
+            client.println("<p>LED 26 State: " + led26State + "</p>");
+            if (led26State == "off") {
+              client.println("<a href=\"/26/on\"><button class=\"button\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/26/off\"><button class=\"button button-off\">OFF</button></a>");
+            }
+
+            // LED 27
+            client.println("<p>LED 27 State: " + led27State + "</p>");
+            if (led27State == "off") {
+              client.println("<a href=\"/27/on\"><button class=\"button\">ON</button></a>");
+            } else {
+              client.println("<a href=\"/27/off\"><button class=\"button button-off\">OFF</button></a>");
+            }
+
+            client.println("</body></html>");
+            client.println();
+
+            break;
+          }
+          else {
+            currentLine = "";
+          }
+        }
+        else if (c != '\r') {
+          currentLine += c;
+        }
+      }
+    }
+
+    client.stop();
+    Serial.println("Client disconnected\n");
+  }
+}
